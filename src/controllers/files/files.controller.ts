@@ -39,9 +39,9 @@ export class FilesController {
     return cid;
   }
 
-  @Get()
-  async getFiles(@Query('directory') directory: string) {
-    const files = await this.ipfs.getFiles(directory);
+  @Post('list')
+  async getFiles(@Body() body: DirectoryBody) {
+    const files = await this.ipfs.getFiles(body.directory);
     return files;
   }
 
