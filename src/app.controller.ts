@@ -1,9 +1,10 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Res } from '@nestjs/common';
+import { Response } from 'express';
 
 @Controller()
 export class AppController {
   @Get()
-  get(): string {
-    return 'Welcome to IPFS client';
+  get(@Res() res: Response) {
+    res.redirect('/index.html');
   }
 }
