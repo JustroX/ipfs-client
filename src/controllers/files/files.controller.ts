@@ -13,9 +13,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { IpfsService } from 'src/services/ipfs/ipfs.service';
 import { DirectoryBody } from './validation/mkdir.validator';
+import { CIDBody } from './validation/param.validator';
 import { TransferBody } from './validation/transfer.validator';
 
-@Controller('files')
+@Controller('/api/files')
 export class FilesController {
   constructor(private readonly ipfs: IpfsService) {}
 
@@ -36,7 +37,7 @@ export class FilesController {
       file.originalname,
       file.buffer,
     );
-    return cid;
+    return { cid };
   }
 
   @Post('list')
@@ -63,8 +64,8 @@ export class FilesController {
   }
 
   @Get(':cid')
-  async file(@Param('cid') cid: string) {
-    const stream = await this.ipfs.read(cid);
+  async file(@Param() body: CIDBody) {
+    const stream = await this.ipfs.read(body.cid);
     return new StreamableFile(stream);
   }
 }

@@ -29,6 +29,7 @@ export class IpfsService {
     const fullname = `${directory}/${filename}`;
     await node.files.write(fullname, data, {
       create: true,
+      parents: true,
       filename: filename,
     });
     const { cid } = await node.files.stat(fullname);
