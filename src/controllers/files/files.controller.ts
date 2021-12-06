@@ -5,20 +5,29 @@ import {
   HttpException,
   Param,
   Post,
-  Query,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { createReadStream, promises as fs } from 'fs';
+import { copy } from 'fs-extra';
+import { basename } from 'path/posix';
+import { BundlerService } from 'src/services/bundler/bundler.service';
 import { IpfsService } from 'src/services/ipfs/ipfs.service';
+import { DownloadBody } from './validation/download.validator';
 import { DirectoryBody } from './validation/mkdir.validator';
 import { CIDBody } from './validation/param.validator';
 import { TransferBody } from './validation/transfer.validator';
+import { UploadFolderBody } from './validation/upload-folder.validator';
+import { UploadBody } from './validation/upload.validator';
 
 @Controller('/api/files')
 export class FilesController {
-  constructor(private readonly ipfs: IpfsService) {}
+  constructor(
+    private readonly ipfs: IpfsService,
+    private readonly bundler: BundlerService,
+  ) {}
 
   @Post('directory')
   async createDir(@Body() body: DirectoryBody) {
@@ -67,5 +76,87 @@ export class FilesController {
   async file(@Param() body: CIDBody) {
     const stream = await this.ipfs.read(body.cid);
     return new StreamableFile(stream);
+  }
+
+  @Post('pin/pinata/:cid')
+  async pin(@Param() body: CIDBody) {
+    await this.ipfs.pin(body.cid);
+  }
+
+  @Post('pin/pinata/:cid')
+  async pinPinata(@Param() body: CIDBody) {
+    await this.ipfs.pinPinata(body.cid);
+  }
+
+  @Post('bundle/upload/file')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBundleFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: UploadBody,
+  ) {
+    if (!file) throw new HttpException('No file attached', 409);
+
+    const bundledFile = `${process.cwd()}/tmp/bundle.zip`;
+    await this.bundler.bundle('file', file.path, bundledFile, body.passphrase);
+
+    const filename = `${file.originalname}.encrypted`;
+    const cid = await this.ipfs.uploadFile(
+      body.directory,
+      filename,
+      bundledFile,
+    );
+    return { cid };
+  }
+
+  @Post('bundle/upload/folder')
+  @UseInterceptors(FileInterceptor('files'))
+  async uploadBundleFolder(
+    @UploadedFile() files: Express.Multer.File[],
+    @Body() body: UploadFolderBody,
+  ) {
+    if (!files) throw new HttpException('No files attached', 409);
+    if (!files.length) throw new HttpException('No files attached', 409);
+
+    const bundle_root = `${process.cwd()}/tmp/bundle-${Date.now()}`;
+    const data_folder = `${bundle_root}/${body.name}`;
+    await fs.mkdir(data_folder);
+
+    // copy file to directory
+    for (const file of files) {
+      const filename = file.originalname;
+      await copy(file.path, `${data_folder}/${filename}`);
+    }
+
+    const bundledFile = `${process.cwd()}/tmp/bundle.zip`;
+    await this.bundler.bundle(
+      'folder',
+      data_folder,
+      bundledFile,
+      body.passphrase,
+    );
+    await fs.rm(bundle_root, { recursive: true });
+
+    const filename = `${body.name}.encrypted`;
+    const cid = await this.ipfs.uploadFile(
+      body.directory,
+      filename,
+      bundledFile,
+    );
+    return { cid };
+  }
+
+  @Post('bundle/:cid')
+  async download(@Param() body: DownloadBody, @Param() param: CIDBody) {
+    // Remove filename and `encrypted` extension
+    const chunks = basename(body.filename).split('.');
+    if (chunks[chunks.length - 1] == 'encrypted') chunks.pop();
+    const filename = chunks.join('.');
+
+    const unbundled_file = `${process.cwd()}/tmp/unbundled-${Date.now()}-${filename}`;
+    await this.ipfs.download(param.cid, unbundled_file);
+
+    const raw_file = `${process.cwd()}/tmp/${Date.now()}-${filename}`;
+    await this.bundler.unbundle(unbundled_file, raw_file, body.passphrase);
+    return new StreamableFile(createReadStream(raw_file));
   }
 }
