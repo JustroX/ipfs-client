@@ -132,8 +132,17 @@ export class IpfsService {
     await node.pin.add(CID.parse(cid));
   }
 
+  async unpin(cid: string) {
+    const node = await this.getNode();
+    await node.pin.rm(CID.parse(cid));
+  }
+
   pinPinata(cid: string) {
     return Pinata.pin(cid);
+  }
+
+  unpinPinata(cid: string) {
+    return Pinata.unpin(cid);
   }
 
   async download(cid: string, dest: string) {

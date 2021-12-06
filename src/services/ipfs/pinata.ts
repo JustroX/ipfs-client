@@ -9,4 +9,8 @@ export class Pinata {
   static pin(cid: string) {
     return this.sdk.pinByHash(cid);
   }
+
+  static unpin(cid: string) {
+    return this.sdk.unpin(cid);
+  }
 }
