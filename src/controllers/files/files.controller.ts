@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   Param,
   Post,
+  Put,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
@@ -49,13 +51,13 @@ export class FilesController {
     return { cid };
   }
 
-  @Post('list')
+  @Put('list')
   async getFiles(@Body() body: DirectoryBody) {
     const files = await this.ipfs.getFiles(body.directory);
     return files;
   }
 
-  @Post('copy')
+  @Put('copy')
   async copy(@Body() body: TransferBody) {
     const { from, to } = body;
     await this.ipfs.copy(from, to);
@@ -67,7 +69,7 @@ export class FilesController {
     await this.ipfs.move(from, to);
   }
 
-  @Post('remove')
+  @Delete('remove')
   async remove(@Body() body: DirectoryBody) {
     await this.ipfs.remove(body.directory);
   }
@@ -78,14 +80,24 @@ export class FilesController {
     return new StreamableFile(stream);
   }
 
-  @Post('pin/pinata/:cid')
+  @Put('pin/:cid')
   async pin(@Param() body: CIDBody) {
     await this.ipfs.pin(body.cid);
   }
 
-  @Post('pin/pinata/:cid')
+  @Put('pin/pinata/:cid')
   async pinPinata(@Param() body: CIDBody) {
     await this.ipfs.pinPinata(body.cid);
+  }
+
+  @Delete('pin/:cid')
+  async unpin(@Param() body: CIDBody) {
+    await this.ipfs.unpin(body.cid);
+  }
+
+  @Delete('pin/pinata/:cid')
+  async unpinPinata(@Param() body: CIDBody) {
+    await this.ipfs.unpinPinata(body.cid);
   }
 
   @Post('bundle/upload/file')
