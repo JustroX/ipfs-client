@@ -37,3 +37,6 @@ lerna-debug.log*
 ipfs-repo/
 static/
 releases/
+tmp/
+
+.env
