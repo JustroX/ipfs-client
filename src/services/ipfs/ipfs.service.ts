@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { createWriteStream } from 'fs';
 import * as IPFS from 'ipfs-core';
-import { CID } from 'ipfs-core';
-import { pipeline, Readable, Stream } from 'stream';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { Pinata } from './pinata';
 
 export interface Entry {
@@ -10,7 +10,6 @@ export interface Entry {
   type: 'directory' | 'file';
   size: number;
   cid: string;
-  is_pinned: boolean;
   is_pinned_pinata: boolean;
 }
 
@@ -19,10 +18,10 @@ const nodeSource = IPFS.create({
 });
 
 nodeSource.then((node) => {
-  node.pin.remote.service.add('pinata', {
-    endpoint: new URL('https://api.pinata.cloud'),
-    key: process.env.PINATA_API_KEY,
-  });
+  // node.pin.remote.service.add('pinata', {
+  //   endpoint: new URL('https://api.pinata.cloud'),
+  //   key: process.env.PINATA_API_KEY,
+  // });
 });
 
 nodeSource.catch((err) => {
@@ -68,38 +67,18 @@ export class IpfsService {
     const results = node.files.ls(directory);
     const data: Entry[] = [];
 
+    const pinned = await Pinata.getpins();
     for await (const file of results) {
-      // check if locally pinned
-      let is_pinned = false;
-      const pins = await node.pin.ls({
-        paths: [file.cid],
-      });
-      for await (const pin of pins) {
-        if (pin.cid.equals(file.cid)) {
-          is_pinned = true;
-          break;
-        }
-      }
-
       // check if remotely pinned
-      let is_pinned_pinata = false;
-      const pinata_pins = await node.pin.remote.ls({
-        service: 'pinata',
-        cid: [file.cid],
-      });
-      for await (const pin of pinata_pins) {
-        if (pin.cid.equals(file.cid) && pin.status == 'pinned') {
-          is_pinned = true;
-          break;
-        }
-      }
+
+      const cid = file.cid.toString();
+      let is_pinned_pinata = pinned.includes(cid);
 
       data.push({
         name: file.name,
         type: file.type,
         size: file.size,
         cid: file.cid.toString(),
-        is_pinned,
         is_pinned_pinata,
       });
     }
@@ -128,13 +107,15 @@ export class IpfsService {
   }
 
   async pin(cid: string) {
-    const node = await this.getNode();
-    await node.pin.add(CID.parse(cid));
+    throw new InternalServerErrorException('Not yet implemented.');
+    // const node = await this.getNode();
+    // await node.pin.add(CID.parse(cid));
   }
 
   async unpin(cid: string) {
-    const node = await this.getNode();
-    await node.pin.rm(CID.parse(cid));
+    throw new InternalServerErrorException('Not yet implemented.');
+    // const node = await this.getNode();
+    // await node.pin.rm(CID.parse(cid));
   }
 
   pinPinata(cid: string) {

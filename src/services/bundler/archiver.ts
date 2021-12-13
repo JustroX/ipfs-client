@@ -1,7 +1,8 @@
-import * as archiver from 'archiver';
+import archiver from 'archiver';
+import { rejects } from 'assert';
 import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
-import * as unzipper from 'unzipper';
+import unzipper from 'unzipper';
 
 interface ZipContentDirectory {
   type: 'directory';
@@ -91,6 +92,13 @@ export class Archiver {
       path: destination,
     });
     const archive = createReadStream(source);
-    return pipeline(archive, extractor);
+    return new Promise<void>((resolve, reject) => {
+      archive
+        .pipe(extractor)
+        .on('close', () => {
+          resolve();
+        })
+        .on('error', (err) => reject(err));
+    });
   }
 }

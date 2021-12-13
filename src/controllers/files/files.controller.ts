@@ -112,10 +112,11 @@ export class FilesController {
     await this.bundler.bundle('file', file.path, bundledFile, body.passphrase);
 
     const filename = `${file.originalname}.encrypted`;
+    const file_buffer = createReadStream(bundledFile);
     const cid = await this.ipfs.uploadFile(
       body.directory,
       filename,
-      bundledFile,
+      file_buffer,
     );
     return { cid };
   }
@@ -149,16 +150,17 @@ export class FilesController {
     await fs.rm(bundle_root, { recursive: true });
 
     const filename = `${body.name}.encrypted`;
+    const file_buffer = createReadStream(bundledFile);
     const cid = await this.ipfs.uploadFile(
       body.directory,
       filename,
-      bundledFile,
+      file_buffer,
     );
     return { cid };
   }
 
   @Post('bundle/:cid')
-  async download(@Param() body: DownloadBody, @Param() param: CIDBody) {
+  async download(@Body() body: DownloadBody, @Param() param: CIDBody) {
     // Remove filename and `encrypted` extension
     const chunks = basename(body.filename).split('.');
     if (chunks[chunks.length - 1] == 'encrypted') chunks.pop();
@@ -169,6 +171,8 @@ export class FilesController {
 
     const raw_file = `${process.cwd()}/tmp/${Date.now()}-${filename}`;
     await this.bundler.unbundle(unbundled_file, raw_file, body.passphrase);
+
+    await fs.rm(unbundled_file, { recursive: true });
     return new StreamableFile(createReadStream(raw_file));
   }
 }

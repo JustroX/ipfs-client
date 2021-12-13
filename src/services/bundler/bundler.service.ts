@@ -1,6 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { pipeline } from 'stream';
+import {
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  scryptSync,
+} from 'crypto';
+import { pipeline } from 'stream/promises';
 import { createReadStream, createWriteStream, promises as fs } from 'fs';
 import { copy } from 'fs-extra';
 import { basename } from 'path';
@@ -9,8 +18,10 @@ import { Archiver } from './archiver';
 
 @Injectable()
 export class BundlerService {
-  private static generateSymmetricKey(key: string) {
+  private static generateSymmetricKey(passphrase: string) {
     const iv = randomBytes(16);
+    const salt = 'random-salt';
+    const key = scryptSync(passphrase, salt, 32);
     return { key, iv };
   }
 
@@ -22,7 +33,8 @@ export class BundlerService {
   ) {
     // Create bundle directory
     const output_name = basename(output_file);
-    const tmp_root = tmpdir();
+    // const tmp_root = tmpdir();
+    const tmp_root = `${process.cwd()}/tmp`;
     const bundle_name = `${output_name}-${Date.now()}`;
     const bundle_root = `${tmp_root}/${bundle_name}`;
     await fs.mkdir(`${bundle_root}/data`, { recursive: true });
@@ -37,7 +49,7 @@ export class BundlerService {
 
     // Data zipping
     const data_folder_zipped = `${bundle_root}/data.zip`;
-    await Archiver.zipFile(data_folder, 'data.zip', data_folder_zipped);
+    await Archiver.zipFolder(data_folder, 'data', data_folder_zipped);
     await fs.rm(data_folder, { recursive: true });
 
     // Data encryption
@@ -54,13 +66,14 @@ export class BundlerService {
     await fs.writeFile(`${bundle_root}/type.dat`, type, 'utf-8');
 
     // Zip bundle
-    await Archiver.zipFolder(bundle_root, bundle_name, output_file);
+    await Archiver.zipFolder(bundle_root, 'content', output_file);
     await fs.rm(bundle_root, { recursive: true });
   }
 
   async unbundle(source: string, output_file: string, passphrase: string) {
     // Create unbundle directory
-    const tmp_root = tmpdir();
+    // const tmp_root = tmpdir();
+    const tmp_root = `${process.cwd()}/tmp`;
     const unbundle_root = `${tmp_root}/unbundle-${Date.now()}`;
     await fs.mkdir(unbundle_root, { recursive: true });
 
@@ -74,13 +87,14 @@ export class BundlerService {
     await fs.rm(bundle, { recursive: true });
 
     // Read IV
-    const iv = await fs.readFile(`${unbundle_root}/iv.dat`);
-    const type = (await fs.readFile(`${unbundle_root}/type.dat`, 'utf-8')) as
-      | 'file'
-      | 'folder';
+    const iv = await fs.readFile(`${unbundle_root}/content/iv.dat`);
+    const type = (await fs.readFile(
+      `${unbundle_root}/content/type.dat`,
+      'utf-8',
+    )) as 'file' | 'folder';
 
     // Data decryption
-    const data_folder_encrypted = `${unbundle_root}/data.zip.enc`;
+    const data_folder_encrypted = `${unbundle_root}/content/data.zip.enc`;
     const data_folder_zipped = `${unbundle_root}/data.zip`;
     await this.decryptFile(
       data_folder_encrypted,
@@ -95,8 +109,8 @@ export class BundlerService {
     } else {
       const data_folder = `${unbundle_root}/data`;
       await Archiver.unzip(data_folder_zipped, data_folder);
-      const files = await fs.readdir(data_folder);
-      await fs.copyFile(files[0], output_file);
+      const files = await fs.readdir(`${data_folder}/data`);
+      await fs.copyFile(`${data_folder}/data/${files[0]}`, output_file);
     }
 
     await fs.rm(unbundle_root, { recursive: true });
@@ -107,7 +121,7 @@ export class BundlerService {
     const { key, iv } = BundlerService.generateSymmetricKey(passphrase);
     await pipeline(
       createReadStream(source),
-      createCipheriv('aes-256-gcm', key, iv),
+      createCipheriv('aes-256-cbc', key, iv),
       createWriteStream(dest),
     );
     return { dest, iv };
@@ -116,12 +130,13 @@ export class BundlerService {
   private async decryptFile(
     source: string,
     dest: string,
-    key: string,
+    passphrase: string,
     iv: Buffer,
   ) {
+    const { key } = BundlerService.generateSymmetricKey(passphrase);
     await pipeline(
       createReadStream(source),
-      createDecipheriv('aes-256-gcm', key, iv),
+      createDecipheriv('aes-256-cbc', key, iv),
       createWriteStream(dest),
     );
     return dest;

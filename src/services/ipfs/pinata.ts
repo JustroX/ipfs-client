@@ -1,4 +1,7 @@
 import pinata from '@pinata/sdk';
+import { config } from 'dotenv';
+
+config();
 
 export class Pinata {
   private static sdk = pinata(
@@ -12,5 +15,9 @@ export class Pinata {
 
   static unpin(cid: string) {
     return this.sdk.unpin(cid);
+  }
+
+  static getpins() {
+    return this.sdk.pinList().then((x) => x.rows.map((y) => y.ipfs_pin_hash));
   }
 }
