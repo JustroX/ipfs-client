@@ -13,4 +13,6 @@ export class UploadFolderBody {
   @IsString()
   @MinLength(12)
   passphrase: string;
+
+  willSaveKey?: boolean;
 }

@@ -16,6 +16,7 @@ import { createReadStream, promises as fs } from 'fs';
 import { copy } from 'fs-extra';
 import { basename } from 'path/posix';
 import { BundlerService } from 'src/services/bundler/bundler.service';
+import { Keystore } from 'src/services/bundler/keystore';
 import { IpfsService } from 'src/services/ipfs/ipfs.service';
 import { DownloadBody } from './validation/download.validator';
 import { DirectoryBody } from './validation/mkdir.validator';
@@ -118,6 +119,9 @@ export class FilesController {
       filename,
       file_buffer,
     );
+
+    if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
+
     return { cid };
   }
 
@@ -156,6 +160,7 @@ export class FilesController {
       filename,
       file_buffer,
     );
+    if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
     return { cid };
   }
 
@@ -169,8 +174,11 @@ export class FilesController {
     const unbundled_file = `${process.cwd()}/tmp/unbundled-${Date.now()}-${filename}`;
     await this.ipfs.download(param.cid, unbundled_file);
 
+    const saved_passphrase = await Keystore.getKey(param.cid);
+    const passphrase = saved_passphrase || body.passphrase;
+
     const raw_file = `${process.cwd()}/tmp/${Date.now()}-${filename}`;
-    await this.bundler.unbundle(unbundled_file, raw_file, body.passphrase);
+    await this.bundler.unbundle(unbundled_file, raw_file, passphrase);
 
     await fs.rm(unbundled_file, { recursive: true });
     return new StreamableFile(createReadStream(raw_file));
