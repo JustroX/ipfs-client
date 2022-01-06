@@ -11,6 +11,7 @@ export interface Entry {
   size: number;
   cid: string;
   is_pinned_pinata: boolean;
+  is_pinned_pinata_queued: boolean;
 }
 
 const nodeSource = IPFS.create({
@@ -68,11 +69,13 @@ export class IpfsService {
     const data: Entry[] = [];
 
     const pinned = await Pinata.getpins();
+    const queue = await Pinata.getQueue();
     for await (const file of results) {
       // check if remotely pinned
 
       const cid = file.cid.toString();
       let is_pinned_pinata = pinned.includes(cid);
+      let is_pinned_pinata_queued = queue.includes(cid);
 
       data.push({
         name: file.name,
@@ -80,6 +83,7 @@ export class IpfsService {
         size: file.size,
         cid: file.cid.toString(),
         is_pinned_pinata,
+        is_pinned_pinata_queued,
       });
     }
     return data;

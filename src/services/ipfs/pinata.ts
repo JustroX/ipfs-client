@@ -20,4 +20,13 @@ export class Pinata {
   static getpins() {
     return this.sdk.pinList().then((x) => x.rows.map((y) => y.ipfs_pin_hash));
   }
+
+  static getQueue() {
+    return this.sdk
+      .pinJobs({
+        sort: 'ASC',
+        status: 'searching',
+      })
+      .then((x) => x.rows.map((y) => y.ipfs_pin_hash));
+  }
 }
