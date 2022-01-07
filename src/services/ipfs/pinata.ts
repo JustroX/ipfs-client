@@ -1,24 +1,30 @@
-import pinata from '@pinata/sdk';
-import { config } from 'dotenv';
-
-config();
+import pinata, { PinataClient } from '@pinata/sdk';
 
 export class Pinata {
-  private static sdk = pinata(
-    process.env.PINATA_API_KEY,
-    process.env.PINATA_SECRET_KEY,
-  );
+  private static sdk?: PinataClient;
 
-  static pin(cid: string) {
-    return this.sdk.pinByHash(cid);
+  static async getSDK(): Promise<PinataClient> {
+    if (!this.sdk)
+      this.sdk = pinata(
+        process.env.PINATA_API_KEY,
+        process.env.PINATA_SECRET_KEY,
+      );
+    return this.sdk;
   }
 
-  static unpin(cid: string) {
-    return this.sdk.unpin(cid);
+  static async pin(cid: string) {
+    const sdk = await this.getSDK();
+    return sdk.pinByHash(cid);
   }
 
-  static getpins() {
-    return this.sdk.pinList().then((x) =>
+  static async unpin(cid: string) {
+    const sdk = await this.getSDK();
+    return sdk.unpin(cid);
+  }
+
+  static async getpins() {
+    const sdk = await this.getSDK();
+    return sdk.pinList().then((x) =>
       x.rows
         .filter((x) => {
           if (!x.date_unpinned) return true;
@@ -30,8 +36,9 @@ export class Pinata {
     );
   }
 
-  static getQueue() {
-    return this.sdk
+  static async getQueue() {
+    const sdk = await this.getSDK();
+    return sdk
       .pinJobs({
         sort: 'ASC',
       })
