@@ -25,8 +25,11 @@ export class Pinata {
     return this.sdk
       .pinJobs({
         sort: 'ASC',
-        status: 'searching',
       })
-      .then((x) => x.rows.map((y) => y.ipfs_pin_hash));
+      .then((x) =>
+        x.rows
+          .filter((y) => y.status == 'searching')
+          .map((y) => y.ipfs_pin_hash),
+      );
   }
 }
