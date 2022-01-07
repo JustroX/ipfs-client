@@ -32,6 +32,12 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Packaging to Executable
+
+```bash
+$ npm run compile
+```
+
 ## License
 
 Nest is [MIT licensed](LICENSE).
