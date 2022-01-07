@@ -18,7 +18,16 @@ export class Pinata {
   }
 
   static getpins() {
-    return this.sdk.pinList().then((x) => x.rows.map((y) => y.ipfs_pin_hash));
+    return this.sdk.pinList().then((x) =>
+      x.rows
+        .filter((x) => {
+          if (!x.date_unpinned) return true;
+          const date = new Date(x.date_unpinned);
+          const now = new Date();
+          return now < date;
+        })
+        .map((y) => y.ipfs_pin_hash),
+    );
   }
 
   static getQueue() {
