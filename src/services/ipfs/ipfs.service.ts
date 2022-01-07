@@ -16,6 +16,7 @@ export interface Entry {
 
 const nodeSource = IPFS.create({
   repo: `${process.cwd()}/ipfs-repo`,
+  silent: true,
 });
 
 nodeSource.then((node) => {
