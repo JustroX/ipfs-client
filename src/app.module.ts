@@ -11,7 +11,7 @@ import { diskStorage } from 'multer';
 @Module({
   imports: [
     ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'static/ipfs-client-ui'),
+      rootPath: join(__dirname, '..', 'static/ipfs-client-ui'),
       exclude: ['/api'],
     }),
 
