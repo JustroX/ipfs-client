@@ -53,7 +53,7 @@ export class BundlerService {
     await fs.rm(data_folder, { recursive: true });
 
     // Data encryption
-    const data_folder_encrypted = `${bundle_root}/data.zip.enc`;
+    const data_folder_encrypted = `${bundle_root}/data.zip.aes`;
     const { iv } = await this.encryptFile(
       data_folder_zipped,
       data_folder_encrypted,
@@ -70,7 +70,7 @@ export class BundlerService {
     await fs.rm(bundle_root, { recursive: true });
   }
 
-  async unbundle(source: string, output_file: string, passphrase: string) {
+  async unbundle(source: string, output_path: string, passphrase: string) {
     // Create unbundle directory
     // const tmp_root = tmpdir();
     const tmp_root = `${process.cwd()}/tmp`;
@@ -94,7 +94,7 @@ export class BundlerService {
     )) as 'file' | 'folder';
 
     // Data decryption
-    const data_folder_encrypted = `${unbundle_root}/content/data.zip.enc`;
+    const data_folder_encrypted = `${unbundle_root}/content/data.zip.aes`;
     const data_folder_zipped = `${unbundle_root}/data.zip`;
     await this.decryptFile(
       data_folder_encrypted,
@@ -104,17 +104,23 @@ export class BundlerService {
     );
     await fs.rm(data_folder_encrypted, { recursive: true });
 
+    let filename: string;
     if (type == 'folder') {
-      await fs.copyFile(data_folder_zipped, output_file);
+      await fs.copyFile(data_folder_zipped, output_path);
+      filename = 'data.zip';
     } else {
       const data_folder = `${unbundle_root}/data`;
       await Archiver.unzip(data_folder_zipped, data_folder);
       const files = await fs.readdir(`${data_folder}/data`);
-      await fs.copyFile(`${data_folder}/data/${files[0]}`, output_file);
+      await fs.copyFile(
+        `${data_folder}/data/${files[0]}`,
+        `${output_path}/${files[0]}`,
+      );
+      filename = files[0];
     }
 
     await fs.rm(unbundle_root, { recursive: true });
-    return output_file;
+    return filename;
   }
 
   private async encryptFile(source: string, dest: string, passphrase: string) {
