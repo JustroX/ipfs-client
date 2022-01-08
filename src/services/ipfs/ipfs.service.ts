@@ -56,7 +56,9 @@ export class IpfsService {
     const node = await this.getNode();
 
     const fullname =
-      directory == '/' ? `/${filename}` : `${directory}/${filename}`;
+      directory == '/' || directory == '\\'
+        ? `\\${filename}`
+        : `${directory}\\${filename}`;
     await node.files.write(fullname, data, {
       create: true,
       parents: true,
