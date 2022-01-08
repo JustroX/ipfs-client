@@ -47,7 +47,7 @@ export class FilesController {
     const cid = await this.ipfs.uploadFile(
       body.directory,
       file.originalname,
-      file.buffer,
+      createReadStream(file.path),
     );
     return { cid };
   }
