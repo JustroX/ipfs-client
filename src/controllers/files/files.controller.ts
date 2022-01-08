@@ -70,7 +70,7 @@ export class FilesController {
     await this.ipfs.move(from, to);
   }
 
-  @Delete('remove')
+  @Post('remove')
   async remove(@Body() body: DirectoryBody) {
     await this.ipfs.remove(body.directory);
   }
