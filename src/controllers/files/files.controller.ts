@@ -190,7 +190,6 @@ export class FilesController {
     );
 
     await fs.rm(unbundled_file, { recursive: true });
-    console.log(`${output_path}${download_name}`);
     res.set({
       'Content-Type': 'application/octet-stream/json',
       'Content-Disposition': `attachment; filename="${download_name}"`,
