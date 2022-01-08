@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Put,
+  Res,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
@@ -165,7 +166,11 @@ export class FilesController {
   }
 
   @Post('bundle/:cid')
-  async download(@Body() body: DownloadBody, @Param() param: CIDBody) {
+  async download(
+    @Body() body: DownloadBody,
+    @Param() param: CIDBody,
+    @Res({ passthrough: true }) res,
+  ) {
     // Remove filename and `encrypted` extension
     const chunks = basename(body.filename).split('.');
     if (chunks[chunks.length - 1] == 'encrypted') chunks.pop();
@@ -177,10 +182,22 @@ export class FilesController {
     const saved_passphrase = await Keystore.getKey(param.cid);
     const passphrase = saved_passphrase || body.passphrase;
 
-    const raw_file = `${process.cwd()}/tmp/${Date.now()}-${filename}`;
-    await this.bundler.unbundle(unbundled_file, raw_file, passphrase);
+    const output_path = `${process.cwd()}/tmp/`;
+    const download_name = await this.bundler.unbundle(
+      unbundled_file,
+      output_path,
+      passphrase,
+    );
 
     await fs.rm(unbundled_file, { recursive: true });
-    return new StreamableFile(createReadStream(raw_file));
+    console.log(`${output_path}${download_name}`);
+    res.set({
+      'Content-Type': 'application/octet-stream/json',
+      'Content-Disposition': `attachment; filename="${download_name}"`,
+      'File-Name': download_name,
+    });
+    return new StreamableFile(
+      createReadStream(`${output_path}${download_name}`),
+    );
   }
 }
