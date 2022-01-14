@@ -97,7 +97,9 @@
       "node_modules\\leveldown\\**\\*"
     ],
     "targets": [
-      "latest"
+      "win-latest",
+      "mac-latest",
+      "linux-latest"
     ],
     "outputPath": "bin"
   }
