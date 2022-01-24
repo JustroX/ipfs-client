@@ -17,7 +17,6 @@ import { createReadStream, promises as fs } from 'fs';
 import { copy } from 'fs-extra';
 import { basename } from 'path/posix';
 import { BundlerService } from 'src/services/bundler/bundler.service';
-import { Keystore } from 'src/services/bundler/keystore';
 import { IpfsService } from 'src/services/ipfs/ipfs.service';
 import { DownloadBody } from './validation/download.validator';
 import { DirectoryBody } from './validation/mkdir.validator';
@@ -121,7 +120,7 @@ export class FilesController {
       file_buffer,
     );
 
-    if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
+    // if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
 
     return { cid };
   }
@@ -161,7 +160,7 @@ export class FilesController {
       filename,
       file_buffer,
     );
-    if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
+    // if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
     return { cid };
   }
 
@@ -179,8 +178,8 @@ export class FilesController {
     const unbundled_file = `${process.cwd()}/tmp/unbundled-${Date.now()}-${filename}`;
     await this.ipfs.download(param.cid, unbundled_file);
 
-    const saved_passphrase = await Keystore.getKey(param.cid);
-    const passphrase = saved_passphrase || body.passphrase;
+    // const saved_passphrase = await Keystore.getKey(param.cid);
+    const passphrase = body.passphrase;
 
     const output_path = `${process.cwd()}/tmp/`;
     const download_name = await this.bundler.unbundle(
