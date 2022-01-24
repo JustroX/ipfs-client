@@ -29,7 +29,8 @@ async function bootstrap() {
   await app.listen(3000);
   console.log(
     `\n\n\n\n
-Authors:
+Project Contributors:
+- Feria, Rommel
 - Romero, Justine Che T.
 - Surara, Ron Christian C.
 --------------------------------------
