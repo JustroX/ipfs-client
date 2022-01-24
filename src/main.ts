@@ -29,8 +29,9 @@ async function bootstrap() {
   await app.listen(3000);
   console.log(
     `\n\n\n\n
-Project Contributors:
+Advisor:
 - Feria, Rommel
+Developers:
 - Romero, Justine Che T.
 - Surara, Ron Christian C.
 --------------------------------------
