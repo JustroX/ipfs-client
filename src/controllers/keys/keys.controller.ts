@@ -13,8 +13,9 @@ export class KeysController {
 
   @Post()
   async setKeys(@Body() keys: KeyBody) {
-    const is_set = this.isSet();
-    if (is_set) throw new ConflictException('Pinata keys are already set.');
+    const { is_missing } = this.isSet();
+    if (!is_missing)
+      throw new ConflictException('Pinata keys are already set.');
 
     process.env.PINATA_API_KEY = keys.pinata_api;
     process.env.PINATA_SECRET_KEY = keys.pinata_secret;
