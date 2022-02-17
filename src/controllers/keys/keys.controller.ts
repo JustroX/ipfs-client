@@ -7,7 +7,7 @@ export class KeysController {
   @Get()
   isSet() {
     return {
-      is_set: !process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_KEY,
+      is_missing: !process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_KEY,
     };
   }
 
