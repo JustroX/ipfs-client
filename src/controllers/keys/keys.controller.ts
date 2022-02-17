@@ -2,7 +2,7 @@ import { Body, ConflictException, Controller, Get, Post } from '@nestjs/common';
 import { KeyBody } from './validation/keys.validator';
 import { writeFile } from 'fs/promises';
 
-@Controller('keys')
+@Controller('/api/keys')
 export class KeysController {
   @Get()
   isSet() {
