@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpException,
+  Logger,
   Param,
   Post,
   Put,
@@ -15,6 +16,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { createReadStream, promises as fs } from 'fs';
 import { copy } from 'fs-extra';
+import moment from 'moment';
 import { basename } from 'path/posix';
 import { BundlerService } from 'src/services/bundler/bundler.service';
 import { IpfsService } from 'src/services/ipfs/ipfs.service';
@@ -27,6 +29,8 @@ import { UploadBody } from './validation/upload.validator';
 
 @Controller('/api/files')
 export class FilesController {
+  private readonly logger = new Logger(FilesController.name);
+
   constructor(
     private readonly ipfs: IpfsService,
     private readonly bundler: BundlerService,
@@ -44,11 +48,15 @@ export class FilesController {
     @Body() body: DirectoryBody,
   ) {
     if (!file) throw new HttpException('No file attached', 409);
+    const start = moment();
+    this.logger.log('Upload started');
     const cid = await this.ipfs.uploadFile(
       body.directory,
       file.originalname,
       createReadStream(file.path),
     );
+    this.logger.log(`Upload time ${moment().diff(start, 'milliseconds')} ms`);
+
     return { cid };
   }
 
@@ -77,8 +85,16 @@ export class FilesController {
 
   @Get(':cid')
   async file(@Param() body: CIDBody) {
+    const start = moment();
+    this.logger.log('Download started');
     const stream = await this.ipfs.read(body.cid);
-    return new StreamableFile(stream);
+    const streamable = new StreamableFile(stream);
+    streamable.getStream().on('close', () => {
+      this.logger.log(
+        `Download time ${moment().diff(start, 'milliseconds')} ms`,
+      );
+    });
+    return streamable;
   }
 
   @Put('pin/:cid')
