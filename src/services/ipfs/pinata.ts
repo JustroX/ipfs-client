@@ -1,4 +1,5 @@
 import pinata, { PinataClient } from '@pinata/sdk';
+import { Readable } from 'stream';
 
 export class Pinata {
   private static sdk?: PinataClient;
@@ -15,6 +16,10 @@ export class Pinata {
   static async pin(cid: string) {
     const sdk = await this.getSDK();
     return sdk.pinByHash(cid);
+  }
+
+  static async pinBinaryByHash(file: Readable) {
+    return this.sdk.pinFileToIPFS(file);
   }
 
   static async unpin(cid: string) {
@@ -44,7 +49,12 @@ export class Pinata {
       })
       .then((x) =>
         x.rows
-          .filter((y) => y.status == 'searching')
+          .filter(
+            (y) =>
+              y.status == 'searching' ||
+              y.status == 'prechecking' ||
+              y.status == 'retrieving',
+          )
           .map((y) => y.ipfs_pin_hash),
       );
   }

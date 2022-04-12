@@ -14,7 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { createReadStream, promises as fs } from 'fs';
+import { createReadStream, createWriteStream, promises as fs } from 'fs';
 import { copy } from 'fs-extra';
 import moment from 'moment';
 import { basename } from 'path/posix';
@@ -26,6 +26,8 @@ import { CIDBody } from './validation/param.validator';
 import { TransferBody } from './validation/transfer.validator';
 import { UploadFolderBody } from './validation/upload-folder.validator';
 import { UploadBody } from './validation/upload.validator';
+import { fromFile } from 'file-type';
+import { pipeline } from 'stream/promises';
 
 @Controller('/api/files')
 export class FilesController {
@@ -72,6 +74,11 @@ export class FilesController {
     await this.ipfs.copy(from, to);
   }
 
+  @Put('import/:cid')
+  import(@Param('cid') cid: string, @Body() { directory }: DirectoryBody) {
+    return this.ipfs.importFile(cid.trim(), directory);
+  }
+
   @Post('move')
   async move(@Body() body: TransferBody) {
     const { from, to } = body;
@@ -84,22 +91,27 @@ export class FilesController {
   }
 
   @Get(':cid')
-  async file(@Param() body: CIDBody) {
-    const start = moment();
+  async file(@Param() body: CIDBody, @Res({ passthrough: true }) res) {
     this.logger.log('Download started');
     const stream = await this.ipfs.read(body.cid);
-    const streamable = new StreamableFile(stream);
-    streamable.getStream().on('close', () => {
-      this.logger.log(
-        `Download time ${moment().diff(start, 'milliseconds')} ms`,
-      );
+
+    const temp_file_path = `${process.cwd()}/tmp/${body.cid}.temp`;
+    const temp_os = createWriteStream(temp_file_path);
+    await pipeline(stream, temp_os);
+
+    const { ext } = await fromFile(temp_file_path);
+    res.set({
+      'Content-Type': 'application/octet-stream/json',
+      'Content-Disposition': `attachment; filename="${body.cid}.${ext}"`,
+      'File-Name': `${body.cid}.${ext}`,
     });
-    return streamable;
+
+    return new StreamableFile(createReadStream(temp_file_path));
   }
 
   @Put('pin/:cid')
   async pin(@Param() body: CIDBody) {
-    await this.ipfs.pin(body.cid);
+    await this.ipfs.pinPinataDirect(body.cid);
   }
 
   @Put('pin/pinata/:cid')
@@ -213,5 +225,11 @@ export class FilesController {
     return new StreamableFile(
       createReadStream(`${output_path}${download_name}`),
     );
+  }
+
+  @Get('/encrypted/:cid')
+  async isEncrypted(@Param() param: CIDBody) {
+    const is_encrypted = await this.ipfs.isEncrypted(param.cid);
+    return { is_encrypted };
   }
 }
