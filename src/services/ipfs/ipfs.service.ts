@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { fromFile } from 'file-type';
-import { createWriteStream, promises as fs } from 'fs';
+import { createWriteStream, existsSync, mkdirSync, promises as fs } from 'fs';
 import * as IPFS from 'ipfs-core';
 import { basename } from 'path';
 import { Readable } from 'stream';
@@ -200,7 +200,10 @@ export class IpfsService {
   }
 
   async isEncrypted(cid: string) {
-    const source = `${process.cwd()}/tmp/unbundled-${Date.now()}-test`;
+    const tmp = `${process.cwd()}/tmp`;
+    if (!existsSync(tmp)) mkdirSync(tmp);
+
+    const source = `${tmp}/unbundled-${Date.now()}-test`;
     await this.download(cid, source);
 
     const { ext } = await fromFile(source);
