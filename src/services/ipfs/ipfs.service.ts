@@ -20,14 +20,24 @@ export interface Entry {
 
 const nodeSource = IPFS.create({
   repo: `${process.cwd()}/ipfs-repo`,
-  silent: true,
+  start: true,
+  silent: false,
+  relay: {
+    enabled: true,
+  },
 });
 
 nodeSource.then((node) => {
-  // node.pin.remote.service.add('pinata', {
-  //   endpoint: new URL('https://api.pinata.cloud'),
-  //   key: process.env.PINATA_API_KEY,
-  // });
+  let prev_peer = 0;
+  setInterval(() => {
+    node.swarm.peers().then((x) => {
+      const current_peer = x.length;
+      if (current_peer != prev_peer) {
+        console.log(`Peers: ${current_peer}`);
+        prev_peer = current_peer;
+      }
+    });
+  }, 1000);
 });
 
 nodeSource.catch((err) => {
@@ -205,9 +215,13 @@ export class IpfsService {
 
     const source = `${tmp}/unbundled-${Date.now()}-test`;
     await this.download(cid, source);
-
-    const { ext } = await fromFile(source);
-    if (ext != 'zip') return false;
+    try {
+      const { ext } = await fromFile(source);
+      if (ext != 'zip') return false;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
 
     try {
       const tmp_root = `${process.cwd()}/tmp`;

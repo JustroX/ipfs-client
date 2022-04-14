@@ -99,12 +99,16 @@ export class FilesController {
     const temp_os = createWriteStream(temp_file_path);
     await pipeline(stream, temp_os);
 
-    const { ext } = await fromFile(temp_file_path);
-    res.set({
-      'Content-Type': 'application/octet-stream/json',
-      'Content-Disposition': `attachment; filename="${body.cid}.${ext}"`,
-      'File-Name': `${body.cid}.${ext}`,
-    });
+    try {
+      const { ext } = await fromFile(temp_file_path);
+      res.set({
+        'Content-Type': 'application/octet-stream/json',
+        'Content-Disposition': `attachment; filename="${body.cid}.${ext}"`,
+        'File-Name': `${body.cid}.${ext}`,
+      });
+    } catch (err) {
+      console.error(err);
+    }
 
     return new StreamableFile(createReadStream(temp_file_path));
   }
