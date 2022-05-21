@@ -1,59 +1,23 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { fromFile } from 'file-type';
+import { fromBuffer } from 'file-type';
+import core from 'file-type/core';
 import { createWriteStream, existsSync, mkdirSync, promises as fs } from 'fs';
-import * as IPFS from 'ipfs-core';
+
 import { basename } from 'path';
+import { Entry } from 'src/shared/entry.interface';
+import { IPFSNode } from 'src/shared/ipfs-node';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { Archiver } from '../bundler/archiver';
+import { FileImportService } from '../file-import/file-import.service';
 import { Pinata } from './pinata';
-
-export interface Entry {
-  name: string;
-  type: 'directory' | 'file';
-  size: number;
-  cid: string;
-  is_pinned_pinata: boolean;
-  is_pinned_pinata_queued: boolean;
-  is_loading: boolean;
-}
-
-const nodeSource = IPFS.create({
-  repo: `${process.cwd()}/ipfs-repo`,
-  start: true,
-  silent: false,
-  relay: {
-    enabled: true,
-  },
-});
-
-nodeSource.then((node) => {
-  let prev_peer = 0;
-  setInterval(() => {
-    node.swarm.peers().then((x) => {
-      const current_peer = x.length;
-      if (current_peer != prev_peer) {
-        console.log(`Peers: ${current_peer}`);
-        prev_peer = current_peer;
-      }
-    });
-  }, 1000);
-});
-
-nodeSource.catch((err) => {
-  console.error(err);
-});
 
 @Injectable()
 export class IpfsService {
-  private loading_files: {
-    cid: string;
-    directory: string;
-    promise: Promise<void>;
-  }[] = [];
+  constructor(private fileImportService: FileImportService) {}
 
-  private async getNode() {
-    return await nodeSource;
+  private getNode() {
+    return IPFSNode.getNode();
   }
 
   async createDir(path: string) {
@@ -79,7 +43,6 @@ export class IpfsService {
     await node.files.write(fullname, data, {
       create: true,
       parents: true,
-      filename: filename,
     });
     const { cid } = await node.files.stat(fullname);
     return cid.toString();
@@ -92,38 +55,33 @@ export class IpfsService {
 
     const pinned = await Pinata.getpins();
     const queue = await Pinata.getQueue();
-    for await (const file of results) {
-      // check if remotely pinned
 
+    for await (const file of results) {
       const cid = file.cid.toString();
-      let is_pinned_pinata = pinned.includes(cid);
-      let is_pinned_pinata_queued = queue.includes(cid);
+      const is_pinned = pinned.includes(cid);
+      const is_pinned_queue = queue.includes(cid);
+      const status_pin: Entry['status_pin'] = is_pinned
+        ? 'pinned'
+        : is_pinned_queue
+        ? 'queued'
+        : 'unpinned';
 
       data.push({
         name: file.name,
         type: file.type,
         size: file.size,
         cid: file.cid.toString(),
-        is_pinned_pinata,
-        is_pinned_pinata_queued,
-        is_loading: !!this.loading_files.find((x) => x.cid == cid),
+        status_pin,
+        status_content: 'available',
       });
     }
 
-    for (const file of this.loading_files) {
-      if (directory != file.directory) continue;
+    for (const file of this.fileImportService.getFilesInDirectory(directory)) {
       const isAlready = data.find((x) => x.cid == file.cid);
       if (isAlready) continue;
-      data.push({
-        name: 'Importing...',
-        type: 'file',
-        size: NaN,
-        cid: file.cid,
-        is_pinned_pinata: false,
-        is_pinned_pinata_queued: false,
-        is_loading: true,
-      });
+      data.push(file);
     }
+
     return data;
   }
 
@@ -182,46 +140,23 @@ export class IpfsService {
     await pipeline(Readable.from(stream), output);
   }
 
-  importFile(cid: string, directory: string) {
-    const p = (async () => {
-      const node = await this.getNode();
-      console.log(`File ${cid}: Importing`);
-      const stream = node.cat(cid);
-      await this.uploadFile(directory, cid, stream);
-    })();
+  importFile(cid: string, directory: string, name: string) {
+    this.fileImportService.addImport(cid, directory, name);
+  }
 
-    const state = {
-      cid,
-      promise: p,
-      directory,
-    };
-
-    // check if file is encrypted
-    p.then(() => {
-      console.log(`File ${cid}: File import success.`);
-
-      this.loading_files = this.loading_files.filter((x) => x.cid != cid);
-    }).catch((err) => {
-      console.error('Failed to import', err);
-      this.loading_files = this.loading_files.filter((x) => x.cid != cid);
-    });
-
-    this.loading_files.push(state);
+  cancelImportFile(cid: string, directory: string) {
+    this.fileImportService.cancel(cid, directory);
   }
 
   async isEncrypted(cid: string) {
     const tmp = `${process.cwd()}/tmp`;
     if (!existsSync(tmp)) mkdirSync(tmp);
 
+    const type = await this.getFileType(cid);
+    if (type?.ext != 'zip') return false;
+
     const source = `${tmp}/unbundled-${Date.now()}-test`;
     await this.download(cid, source);
-    try {
-      const { ext } = await fromFile(source);
-      if (ext != 'zip') return false;
-    } catch (err) {
-      console.error(err);
-      return false;
-    }
 
     try {
       const tmp_root = `${process.cwd()}/tmp`;
@@ -245,6 +180,26 @@ export class IpfsService {
       return true;
     } catch (err) {
       return false;
+    }
+  }
+
+  async getFileType(cid: string): Promise<core.FileTypeResult | null> {
+    const node = await this.getNode();
+    const stream = node.cat(cid, {
+      offset: 0,
+      length: 100,
+    });
+    try {
+      const chunks: number[] = [];
+      for await (const chunk of stream) {
+        chunks.push(...chunk.values());
+      }
+      const details = await fromBuffer(Uint8Array.from(chunks));
+      if (!details) return null;
+      return details;
+    } catch (err) {
+      console.error(err);
+      return null;
     }
   }
 }

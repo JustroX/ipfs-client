@@ -8,6 +8,7 @@ import { BundlerService } from './services/bundler/bundler.service';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { KeysController } from './controllers/keys/keys.controller';
+import { FileImportService } from './services/file-import/file-import.service';
 
 @Module({
   imports: [
@@ -26,6 +27,6 @@ import { KeysController } from './controllers/keys/keys.controller';
     }),
   ],
   controllers: [AppController, FilesController, KeysController],
-  providers: [IpfsService, BundlerService],
+  providers: [IpfsService, BundlerService, FileImportService],
 })
 export class AppModule {}

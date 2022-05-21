@@ -26,8 +26,6 @@ import { CIDBody } from './validation/param.validator';
 import { TransferBody } from './validation/transfer.validator';
 import { UploadFolderBody } from './validation/upload-folder.validator';
 import { UploadBody } from './validation/upload.validator';
-import { fromFile } from 'file-type';
-import { pipeline } from 'stream/promises';
 
 @Controller('/api/files')
 export class FilesController {
@@ -75,8 +73,19 @@ export class FilesController {
   }
 
   @Put('import/:cid')
-  import(@Param('cid') cid: string, @Body() { directory }: DirectoryBody) {
-    return this.ipfs.importFile(cid.trim(), directory);
+  import(
+    @Param('cid') cid: string,
+    @Body() { directory, name }: DirectoryBody,
+  ) {
+    return this.ipfs.importFile(cid.trim(), directory, name ?? cid.trim());
+  }
+
+  @Delete('import/:cid')
+  importCancel(
+    @Param('cid') cid: string,
+    @Body() { directory }: DirectoryBody,
+  ) {
+    return this.ipfs.cancelImportFile(cid.trim(), directory);
   }
 
   @Post('move')
@@ -93,24 +102,23 @@ export class FilesController {
   @Get(':cid')
   async file(@Param() body: CIDBody, @Res({ passthrough: true }) res) {
     this.logger.log('Download started');
-    const stream = await this.ipfs.read(body.cid);
-
-    const temp_file_path = `${process.cwd()}/tmp/${body.cid}.temp`;
-    const temp_os = createWriteStream(temp_file_path);
-    await pipeline(stream, temp_os);
 
     try {
-      const { ext } = await fromFile(temp_file_path);
-      res.set({
-        'Content-Type': 'application/octet-stream/json',
-        'Content-Disposition': `attachment; filename="${body.cid}.${ext}"`,
-        'File-Name': `${body.cid}.${ext}`,
-      });
+      const fileType = await this.ipfs.getFileType(body.cid);
+      if (fileType) {
+        const { ext } = fileType;
+        res.set({
+          'Content-Type': 'application/octet-stream/json',
+          'Content-Disposition': `attachment; filename="${body.cid}.${ext}"`,
+          'File-Name': `${body.cid}.${ext}`,
+        });
+      }
     } catch (err) {
       console.error(err);
     }
 
-    return new StreamableFile(createReadStream(temp_file_path));
+    const stream = await this.ipfs.read(body.cid);
+    return new StreamableFile(stream);
   }
 
   @Put('pin/:cid')
