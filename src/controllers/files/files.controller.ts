@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Res,
   StreamableFile,
   UploadedFile,
@@ -101,7 +102,11 @@ export class FilesController {
   }
 
   @Get(':cid')
-  async file(@Param() body: CIDBody, @Res({ passthrough: true }) res) {
+  async file(
+    @Param() body: CIDBody,
+    @Res({ passthrough: true }) res,
+    @Query('name') filename,
+  ) {
     this.logger.log('Download started');
 
     try {
@@ -110,7 +115,9 @@ export class FilesController {
         const { ext } = fileType;
         res.set({
           'Content-Type': 'application/octet-stream/json',
-          'Content-Disposition': `attachment; filename="${body.cid}.${ext}"`,
+          'Content-Disposition': `attachment; filename="${
+            filename ?? body.cid
+          }.${ext}"`,
           'File-Name': `${body.cid}.${ext}`,
         });
       }
