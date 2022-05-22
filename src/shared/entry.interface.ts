@@ -11,4 +11,6 @@ export interface Entry {
     | 'timeout'
     | 'failed'
     | 'available';
+
+  is_encrypted: boolean;
 }
