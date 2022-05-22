@@ -26,6 +26,7 @@ import { CIDBody } from './validation/param.validator';
 import { TransferBody } from './validation/transfer.validator';
 import { UploadFolderBody } from './validation/upload-folder.validator';
 import { UploadBody } from './validation/upload.validator';
+import { open } from 'temp';
 
 @Controller('/api/files')
 export class FilesController {
@@ -139,8 +140,11 @@ export class FilesController {
   ) {
     if (!file) throw new HttpException('No file attached', 409);
 
-    const bundledFile = `${process.cwd()}/tmp/bundle.zip`;
-    await this.bundler.bundle('file', file.path, bundledFile, body.passphrase);
+    const bundledFile = await this.bundler.bundle(
+      'file',
+      file.path,
+      body.passphrase,
+    );
 
     const filename = `${file.originalname}.encrypted`;
     const file_buffer = createReadStream(bundledFile);
@@ -150,47 +154,6 @@ export class FilesController {
       file_buffer,
     );
 
-    // if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
-
-    return { cid };
-  }
-
-  @Post('bundle/upload/folder')
-  @UseInterceptors(FileInterceptor('files'))
-  async uploadBundleFolder(
-    @UploadedFile() files: Express.Multer.File[],
-    @Body() body: UploadFolderBody,
-  ) {
-    if (!files) throw new HttpException('No files attached', 409);
-    if (!files.length) throw new HttpException('No files attached', 409);
-
-    const bundle_root = `${process.cwd()}/tmp/bundle-${Date.now()}`;
-    const data_folder = `${bundle_root}/${body.name}`;
-    await fs.mkdir(data_folder);
-
-    // copy file to directory
-    for (const file of files) {
-      const filename = file.originalname;
-      await copy(file.path, `${data_folder}/${filename}`);
-    }
-
-    const bundledFile = `${process.cwd()}/tmp/bundle.zip`;
-    await this.bundler.bundle(
-      'folder',
-      data_folder,
-      bundledFile,
-      body.passphrase,
-    );
-    await fs.rm(bundle_root, { recursive: true });
-
-    const filename = `${body.name}.encrypted`;
-    const file_buffer = createReadStream(bundledFile);
-    const cid = await this.ipfs.uploadFile(
-      body.directory,
-      filename,
-      file_buffer,
-    );
-    // if (body.willSaveKey) await Keystore.setKey(cid, body.passphrase);
     return { cid };
   }
 
@@ -200,32 +163,27 @@ export class FilesController {
     @Param() param: CIDBody,
     @Res({ passthrough: true }) res,
   ) {
-    // Remove filename and `encrypted` extension
-    const chunks = basename(body.filename).split('.');
-    if (chunks[chunks.length - 1] == 'encrypted') chunks.pop();
-    const filename = chunks.join('.');
-
-    const unbundled_file = `${process.cwd()}/tmp/unbundled-${Date.now()}-${filename}`;
+    const fd_source = await open();
+    const unbundled_file = fd_source.path;
     await this.ipfs.download(param.cid, unbundled_file);
 
     // const saved_passphrase = await Keystore.getKey(param.cid);
     const passphrase = body.passphrase;
 
-    const output_path = `${process.cwd()}/tmp/`;
-    const download_name = await this.bundler.unbundle(
-      unbundled_file,
-      output_path,
-      passphrase,
-    );
+    const fd = await this.bundler.unbundle(unbundled_file, passphrase);
+    const output_path = fd.output_path;
+    const download_name = fd.filename;
 
-    await fs.rm(unbundled_file, { recursive: true });
+    console.log('Unbundling done');
+
     res.set({
       'Content-Type': 'application/octet-stream/json',
       'Content-Disposition': `attachment; filename="${download_name}"`,
       'File-Name': download_name,
     });
+
     return new StreamableFile(
-      createReadStream(`${output_path}${download_name}`),
+      createReadStream(`${output_path}/${download_name}`),
     );
   }
 

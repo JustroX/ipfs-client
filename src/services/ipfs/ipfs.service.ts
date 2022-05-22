@@ -1,13 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { fromBuffer } from 'file-type';
 import core from 'file-type/core';
-import {
-  createReadStream,
-  createWriteStream,
-  existsSync,
-  mkdirSync,
-  promises as fs,
-} from 'fs';
+import { createWriteStream, existsSync, mkdirSync, promises as fs } from 'fs';
 
 import { basename } from 'path';
 import { Entry } from 'src/shared/entry.interface';
@@ -17,6 +11,7 @@ import { pipeline } from 'stream/promises';
 import { Archiver } from '../bundler/archiver';
 import { FileImportService } from '../file-import/file-import.service';
 import { Pinata } from './pinata';
+import { open, mkdir } from 'temp';
 
 @Injectable()
 export class IpfsService {
@@ -44,8 +39,13 @@ export class IpfsService {
       | Iterable<Uint8Array>,
   ) {
     const node = await this.getNode();
-    const fullname =
+    let fullname =
       directory == '/' ? `/${filename}` : `${directory}/${filename}`;
+
+    try {
+      await node.files.stat(fullname, {});
+      fullname += ' (1)';
+    } catch (err) {}
     await node.files.write(fullname, data, {
       create: true,
       parents: true,
@@ -132,17 +132,15 @@ export class IpfsService {
   }
 
   async isEncrypted(cid: string) {
-    const tmp = `${process.cwd()}/tmp`;
-    if (!existsSync(tmp)) mkdirSync(tmp);
-
     const type = await this.getFileType(cid);
     if (type?.ext != 'zip') return false;
 
-    const source = `${tmp}/unbundled-${Date.now()}-test`;
+    const temp = await open();
+    const source = temp.path;
     await this.download(cid, source);
 
     try {
-      const tmp_root = `${process.cwd()}/tmp`;
+      const tmp_root = await mkdir();
       const unbundle_root = `${tmp_root}/unbundle-${Date.now()}`;
       await fs.mkdir(unbundle_root, { recursive: true });
 
