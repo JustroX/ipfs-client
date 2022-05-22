@@ -116,7 +116,7 @@ export class FilesController {
         res.set({
           'Content-Type': 'application/octet-stream/json',
           'Content-Disposition': `attachment; filename="${
-            filename ?? body.cid
+            basename(filename) ?? body.cid
           }.${ext}"`,
           'File-Name': `${body.cid}.${ext}`,
         });
