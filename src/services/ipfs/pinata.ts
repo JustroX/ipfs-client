@@ -63,27 +63,17 @@ export class Pinata {
     const pinList = await sdk
       .pinList({
         hashContains: cid,
+        status: 'pinned',
       })
       .then((x) => x.rows.find((x) => x.ipfs_pin_hash == cid));
 
     if (pinList) {
-      const { date_pinned, date_unpinned } = pinList;
-      let pinned = true;
-      if (date_pinned && date_unpinned) {
-        const d_unpin = new Date(date_unpinned);
-        const d_pin = new Date(date_pinned);
-        pinned = d_pin < d_unpin;
-      }
-
-      if (pinned) {
-        this.cache.set(cid, 'pinned');
-        console.log('PIN STATUS ', cid, 'Pinned');
-        return;
-      }
+      this.cache.set(cid, 'pinned');
+      console.log('PIN STATUS ', cid, 'Pinned');
+    } else {
+      this.cache.set(cid, 'unpinned');
+      console.log('PIN STATUS ', cid, 'Unpinned');
     }
-
-    this.cache.set(cid, 'unpinned');
-    console.log('PIN STATUS ', cid, 'Unpinned');
   }
 
   private static async refreshQueuedList() {
@@ -114,23 +104,14 @@ export class Pinata {
 
   private static async refreshPinnedList() {
     const sdk = await this.getSDK();
-    const in_pinned = await sdk.pinList().then((x) =>
-      x.rows.map((x) => {
-        let pinned = true;
-        if (x.date_pinned && x.date_unpinned) {
-          const d_unpin = new Date(x.date_unpinned);
-          const d_pin = new Date(x.date_pinned);
-          pinned = d_pin < d_unpin;
-        }
-
-        return { pinned, cid: x.ipfs_pin_hash };
-      }),
-    );
+    const in_pinned = await sdk
+      .pinList({ status: 'pinned' })
+      .then((x) => x.rows.map((x) => x.ipfs_pin_hash));
 
     this.cache.mset(
-      in_pinned.map(({ cid, pinned }) => ({
+      in_pinned.map((cid) => ({
         key: cid,
-        val: pinned ? 'pinned' : 'unpinned',
+        val: 'pinned',
       })),
     );
   }
@@ -156,37 +137,39 @@ export class Pinata {
   }
 
   static async pinBinaryByHash(cid: string, file: Readable) {
-    const status = this.getPinStatus(cid);
-    console.log(status);
-    if (status == 'unpinned') this.cache.set(cid, 'queued');
+    this.safePin(cid, file);
+  }
 
+  private static async safePin(cid: string, file: Readable) {
+    const status = this.getPinStatus(cid);
+    if (status == 'unpinned') this.cache.set(cid, 'queued');
     const temp = await open();
     const output = createWriteStream(temp.path);
-
-    pipeline(file, output)
-      .then(() => {
-        this.sdk
-          .pinFileToIPFS(createReadStream(temp.path))
-          .then((f) => {
-            this.schedule(this.refreshPinStatus(cid));
-            return f;
-          })
-          .catch((err) => {
-            if (status == 'unpinned') this.cache.set(cid, 'unpinned');
-            console.error(err);
-          });
-      })
-      .catch((err) => {
-        if (status == 'unpinned') this.cache.set(cid, 'unpinned');
-        console.error(err);
-      });
+    try {
+      await pipeline(file, output);
+      const f = await this.sdk.pinFileToIPFS(createReadStream(temp.path));
+      if (f.IpfsHash != cid) await this.pin(cid);
+      else {
+        this.schedule(this.refreshPinStatus(cid));
+        console.log(`PIN STATUS ${cid} Sent to pinata`);
+      }
+    } catch (err) {
+      if (status == 'unpinned') this.cache.set(cid, 'unpinned');
+      console.error(err);
+    }
   }
 
   static async unpin(cid: string) {
     const sdk = await this.getSDK();
-    this.cache.set(cid, 'unpinned');
-    return sdk.unpin(cid).then(() => {
-      this.schedule(this.refreshPinStatus(cid));
-    });
+    this.cache.set(cid, 'queued');
+    sdk
+      .unpin(cid)
+      .then(() => {
+        this.schedule(this.refreshPinStatus(cid));
+      })
+      .catch((err) => {
+        console.error(err);
+        this.schedule(this.refreshPinStatus(cid));
+      });
   }
 }

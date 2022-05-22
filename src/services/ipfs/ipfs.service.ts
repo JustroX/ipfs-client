@@ -1,8 +1,7 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { fromBuffer } from 'file-type';
 import core from 'file-type/core';
-import { createWriteStream, existsSync, mkdirSync, promises as fs } from 'fs';
-
+import { createWriteStream, promises as fs } from 'fs';
 import { basename } from 'path';
 import { Entry } from 'src/shared/entry.interface';
 import { IPFSNode } from 'src/shared/ipfs-node';
@@ -12,9 +11,12 @@ import { Archiver } from '../bundler/archiver';
 import { FileImportService } from '../file-import/file-import.service';
 import { Pinata } from './pinata';
 import { open, mkdir } from 'temp';
+import Cache from 'node-cache';
 
 @Injectable()
 export class IpfsService {
+  private encrypted_cache = new Cache();
+
   constructor(private fileImportService: FileImportService) {}
 
   private getNode() {
@@ -46,11 +48,17 @@ export class IpfsService {
       await node.files.stat(fullname, {});
       fullname += ' (1)';
     } catch (err) {}
-    await node.files.write(fullname, data, {
-      create: true,
-      parents: true,
+
+    const { cid } = await node.add(data, {
+      chunker: 'size-262144',
+      pin: true,
     });
-    const { cid } = await node.files.stat(fullname);
+    await node.files.cp(`/ipfs/${cid.toString()}`, fullname);
+    // await node.files.write(fullname, data, {
+    //   create: true,
+    //   parents: true,
+    // });
+    // const { cid } = await node.files.stat(fullname);
     return cid.toString();
   }
 
@@ -62,6 +70,9 @@ export class IpfsService {
     for await (const file of results) {
       const cid = file.cid.toString();
       const status_pin: Entry['status_pin'] = Pinata.getPinStatus(cid);
+      const is_encrypted =
+        file.type == 'file' ? this.isEncryptedNonBlocking(cid) : false;
+
       data.push({
         name: file.name,
         type: file.type,
@@ -69,6 +80,7 @@ export class IpfsService {
         cid: file.cid.toString(),
         status_pin,
         status_content: 'available',
+        is_encrypted,
       });
     }
 
@@ -131,37 +143,51 @@ export class IpfsService {
     this.fileImportService.cancel(cid, directory);
   }
 
-  async isEncrypted(cid: string) {
-    const type = await this.getFileType(cid);
-    if (type?.ext != 'zip') return false;
-
-    const temp = await open();
-    const source = temp.path;
-    await this.download(cid, source);
-
-    try {
-      const tmp_root = await mkdir();
-      const unbundle_root = `${tmp_root}/unbundle-${Date.now()}`;
-      await fs.mkdir(unbundle_root, { recursive: true });
-
-      // File transfer
-      const source_name = basename(source);
-      const bundle = `${unbundle_root}/${source_name}`;
-      await fs.copyFile(source, bundle);
-
-      // Unzip bundle
-      await Archiver.unzip(bundle, unbundle_root);
-      await fs.rm(bundle, { recursive: true });
-
-      // Read IV
-      await fs.readFile(`${unbundle_root}/content/iv.dat`);
-      (await fs.readFile(`${unbundle_root}/content/type.dat`, 'utf-8')) as
-        | 'file'
-        | 'folder';
-      return true;
-    } catch (err) {
+  private isEncryptedNonBlocking(cid: string) {
+    let is_encrypted = this.encrypted_cache.get<boolean>(cid);
+    if (typeof is_encrypted != 'boolean') {
+      this.isEncrypted(cid).catch((err) => console.error(err));
       return false;
     }
+    return is_encrypted;
+  }
+
+  async isEncrypted(cid: string) {
+    let is_encrypted = this.encrypted_cache.get<boolean>(cid);
+    if (typeof is_encrypted != 'boolean') {
+      const type = await this.getFileType(cid);
+      if (type?.ext != 'zip') {
+        this.encrypted_cache.set(cid, false);
+      } else {
+        const temp = await open();
+        const source = temp.path;
+        await this.download(cid, source);
+        try {
+          const tmp_root = await mkdir();
+          const unbundle_root = `${tmp_root}/unbundle-${Date.now()}`;
+          await fs.mkdir(unbundle_root, { recursive: true });
+
+          // File transfer
+          const source_name = basename(source);
+          const bundle = `${unbundle_root}/${source_name}`;
+          await fs.copyFile(source, bundle);
+
+          // Unzip bundle
+          await Archiver.unzip(bundle, unbundle_root);
+          await fs.rm(bundle, { recursive: true });
+
+          // Read IV
+          await fs.readFile(`${unbundle_root}/content/iv.dat`);
+          (await fs.readFile(`${unbundle_root}/content/type.dat`, 'utf-8')) as
+            | 'file'
+            | 'folder';
+          this.encrypted_cache.set(cid, true);
+        } catch (err) {
+          this.encrypted_cache.set(cid, false);
+        }
+      }
+    }
+    return this.encrypted_cache.get<boolean>(cid);
   }
 
   async getFileType(cid: string): Promise<core.FileTypeResult | null> {

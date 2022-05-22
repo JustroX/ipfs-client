@@ -115,6 +115,7 @@ class FileImport {
       status_content: this.status,
       size: this.size,
       status_pin: 'unpinned',
+      is_encrypted: false,
     };
   }
 }
