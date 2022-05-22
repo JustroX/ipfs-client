@@ -18,6 +18,17 @@ export class IPFSNode {
         },
       },
     });
+    this.node.then((node) => {
+      const stop = () => {
+        node.stop();
+        process.exit();
+      };
+
+      process.on('SIGTERM', stop);
+      process.on('SIGINT', stop);
+      process.on('SIGHUP', stop);
+      process.on('uncaughtException', stop);
+    });
     this.node.catch((err) => {
       console.error(err);
     });

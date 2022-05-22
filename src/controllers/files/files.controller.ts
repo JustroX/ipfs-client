@@ -121,19 +121,9 @@ export class FilesController {
     return new StreamableFile(stream);
   }
 
-  @Put('pin/:cid')
-  async pin(@Param() body: CIDBody) {
-    await this.ipfs.pinPinataDirect(body.cid);
-  }
-
   @Put('pin/pinata/:cid')
   async pinPinata(@Param() body: CIDBody) {
-    await this.ipfs.pinPinata(body.cid);
-  }
-
-  @Delete('pin/:cid')
-  async unpin(@Param() body: CIDBody) {
-    await this.ipfs.unpin(body.cid);
+    await this.ipfs.pinPinataDirect(body.cid);
   }
 
   @Delete('pin/pinata/:cid')

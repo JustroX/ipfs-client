@@ -1,7 +1,13 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { fromBuffer } from 'file-type';
 import core from 'file-type/core';
-import { createWriteStream, existsSync, mkdirSync, promises as fs } from 'fs';
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  promises as fs,
+} from 'fs';
 
 import { basename } from 'path';
 import { Entry } from 'src/shared/entry.interface';
@@ -53,19 +59,9 @@ export class IpfsService {
     const results = node.files.ls(directory);
     const data: Entry[] = [];
 
-    const pinned = await Pinata.getpins();
-    const queue = await Pinata.getQueue();
-
     for await (const file of results) {
       const cid = file.cid.toString();
-      const is_pinned = pinned.includes(cid);
-      const is_pinned_queue = queue.includes(cid);
-      const status_pin: Entry['status_pin'] = is_pinned
-        ? 'pinned'
-        : is_pinned_queue
-        ? 'queued'
-        : 'unpinned';
-
+      const status_pin: Entry['status_pin'] = Pinata.getPinStatus(cid);
       data.push({
         name: file.name,
         type: file.type,
@@ -106,18 +102,6 @@ export class IpfsService {
     await node.files.rm(path, { recursive: true });
   }
 
-  async pin(cid: string) {
-    throw new InternalServerErrorException('Not yet implemented.');
-    // const node = await this.getNode();
-    // await node.pin.add(CID.parse(cid));
-  }
-
-  async unpin(cid: string) {
-    throw new InternalServerErrorException('Not yet implemented.');
-    // const node = await this.getNode();
-    // await node.pin.rm(CID.parse(cid));
-  }
-
   pinPinata(cid: string) {
     return Pinata.pin(cid);
   }
@@ -125,8 +109,7 @@ export class IpfsService {
   async pinPinataDirect(cid: string) {
     const node = await this.getNode();
     const stream = node.cat(cid);
-    const readable = Readable.from(stream);
-    return Pinata.pinBinaryByHash(readable);
+    return Pinata.pinBinaryByHash(cid, Readable.from(stream));
   }
 
   unpinPinata(cid: string) {

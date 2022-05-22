@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import moment from 'moment';
 import { Entry } from 'src/shared/entry.interface';
 import { IPFSNode } from 'src/shared/ipfs-node';
-import { promises, Readable } from 'stream';
+import { Readable } from 'stream';
 
 class FileImport {
   private status: Entry['status_content'] = 'searching';

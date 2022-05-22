@@ -4,8 +4,10 @@ import { AppModule } from './app.module';
 import morgan from 'morgan';
 import { config } from 'dotenv';
 import open from 'open';
+import { track } from 'temp';
 
 async function main() {
+  track();
   config();
   await bootstrap();
 }
