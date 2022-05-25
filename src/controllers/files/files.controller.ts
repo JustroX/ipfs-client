@@ -82,7 +82,7 @@ export class FilesController {
     return this.ipfs.importFile(cid.trim(), directory, name ?? cid.trim());
   }
 
-  @Delete('import/:cid')
+  @Put('import/cancel/:cid')
   importCancel(
     @Param('cid') cid: string,
     @Body() { directory }: DirectoryBody,
