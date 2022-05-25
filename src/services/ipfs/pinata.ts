@@ -20,23 +20,27 @@ export class Pinata {
     highWater: 900,
   });
 
-  static async getSDK(): Promise<PinataClient> {
+  static getSDK(): PinataClient {
     if (!this.sdk) {
       this.sdk = pinata(
         process.env.PINATA_API_KEY,
         process.env.PINATA_SECRET_KEY,
       );
       setInterval(() => {
-        this.schedule(this.refreshPinnedList());
-        this.schedule(this.refreshQueuedList());
+        this.schedule(() => {
+          return this.refreshPinnedList();
+        });
+        this.schedule(() => {
+          return this.refreshQueuedList();
+        });
       }, 5000);
     }
     return this.sdk;
   }
 
-  private static async schedule(p: Promise<any>) {
+  private static async schedule(fn: () => Promise<any>) {
     try {
-      await this.limiter.schedule(() => p);
+      await this.limiter.schedule(fn);
     } catch (err) {
       console.error(err);
     }
@@ -119,7 +123,9 @@ export class Pinata {
   static getPinStatus(cid: string): Entry['status_pin'] {
     const value = this.cache.get<Entry['status_pin']>(cid);
     if (!value) {
-      this.schedule(this.refreshPinStatus(cid));
+      this.schedule(() => {
+        return this.refreshPinStatus(cid);
+      });
       return 'unpinned';
     }
     return value;
@@ -131,7 +137,9 @@ export class Pinata {
 
     const sdk = await this.getSDK();
     return sdk.pinByHash(cid).then((file) => {
-      this.schedule(this.refreshPinStatus(cid));
+      this.schedule(() => {
+        return this.refreshPinStatus(cid);
+      });
       return file;
     });
   }
@@ -150,7 +158,9 @@ export class Pinata {
       const f = await this.sdk.pinFileToIPFS(createReadStream(temp.path));
       if (f.IpfsHash != cid) await this.pin(cid);
       else {
-        this.schedule(this.refreshPinStatus(cid));
+        this.schedule(() => {
+          return this.refreshPinStatus(cid);
+        });
         console.log(`PIN STATUS ${cid} Sent to pinata`);
       }
     } catch (err) {
@@ -165,11 +175,15 @@ export class Pinata {
     sdk
       .unpin(cid)
       .then(() => {
-        this.schedule(this.refreshPinStatus(cid));
+        this.schedule(() => {
+          return this.refreshPinStatus(cid);
+        });
       })
       .catch((err) => {
         console.error(err);
-        this.schedule(this.refreshPinStatus(cid));
+        this.schedule(() => {
+          return this.refreshPinStatus(cid);
+        });
       });
   }
 }
