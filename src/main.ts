@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import { config } from 'dotenv';
 import open from 'open';
 import { track } from 'temp';
+import { IPFSNode } from './shared/ipfs-node';
 
 async function main() {
   track();
@@ -19,6 +20,7 @@ async function bootstrap() {
   );
   app.useGlobalPipes(new ValidationPipe());
   await app.listen(3000);
+  await IPFSNode.getNode();
   console.log(
     `\n\n\n\n
 Advisor:
