@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import moment from 'moment';
 import { Entry } from 'src/shared/entry.interface';
 import { IPFSNode } from 'src/shared/ipfs-node';
-import { Readable } from 'stream';
 
 class FileImport {
   private status: Entry['status_content'] = 'searching';
@@ -20,7 +19,12 @@ class FileImport {
   isGarbage() {
     const time = moment.now();
     const duration = moment.unix(this.started).diff(time, 'minute');
-    return this.status == 'available' && duration >= 5;
+
+    if (this.status == 'available' && duration >= 5) return true;
+    if (this.status == 'failed' && duration >= 5) return true;
+    if (this.status == 'timeout' && duration >= 5) return true;
+
+    return false;
   }
 
   start() {
@@ -32,6 +36,7 @@ class FileImport {
 
   cancel() {
     if (this.status == 'failed' || this.status == 'timeout') return;
+    console.log('FILE IMPORT: CANCELED ' + this.cid);
     this.abort.abort();
   }
 
@@ -65,11 +70,25 @@ class FileImport {
 
     const stream = node.cat(this.cid, {
       length: 100,
+      signal: this.abort.signal,
     });
     await node.add(stream, {
       timeout,
       signal: this.abort.signal,
     });
+  }
+
+  private async *readCat(cid: string) {
+    const node = await IPFSNode.getNode();
+    const stream = node.cat(cid, {
+      signal: this.abort.signal,
+    });
+
+    this.size = 0;
+    for await (const chunk of stream) {
+      this.size += chunk.buffer.byteLength;
+      yield chunk;
+    }
   }
 
   private async downloadFile() {
@@ -81,21 +100,13 @@ class FileImport {
         ? `/${this.name}`
         : `${this.directory}/${this.name}`;
 
-    const stream = Readable.from(
-      node.files.read(`/ipfs/${this.cid}`, {
-        signal: this.abort.signal,
-      }),
-    );
+    const stream = this.readCat(this.cid);
 
     await node.add(stream, {
       chunker: 'size-262144',
       signal: this.abort.signal,
-      // create: true,
     });
-    // await node.files.write(full_filename, stream, {
-    //   signal: this.abort.signal,
-    //   create: true,
-    // });
+
     await node.files.cp(`/ipfs/${this.cid}`, full_filename, {
       signal: this.abort.signal,
     });
@@ -152,12 +163,19 @@ export class FileImportService {
     file.start();
   }
 
-  cancel(directory: string, cid: string) {
-    const files = this.queue.filter(
-      (x) => x.directory == directory && x.cid == cid,
-    );
-    files.forEach((file) => {
-      file.cancel();
+  cancel(cid: string, directory: string) {
+    const files = this.queue.filter((x) => {
+      console.log(
+        x.directory,
+        directory,
+        x.cid,
+        cid,
+        x.directory == directory && x.cid == cid,
+      );
+      return x.directory == directory && x.cid == cid;
     });
+    for (const file of files) {
+      file.cancel();
+    }
   }
 }
