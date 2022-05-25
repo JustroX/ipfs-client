@@ -54,11 +54,6 @@ export class IpfsService {
       pin: true,
     });
     await node.files.cp(`/ipfs/${cid.toString()}`, fullname);
-    // await node.files.write(fullname, data, {
-    //   create: true,
-    //   parents: true,
-    // });
-    // const { cid } = await node.files.stat(fullname);
     return cid.toString();
   }
 
@@ -140,7 +135,7 @@ export class IpfsService {
   }
 
   cancelImportFile(cid: string, directory: string) {
-    this.fileImportService.cancel(cid, directory);
+    return this.fileImportService.cancel(cid, directory);
   }
 
   private isEncryptedNonBlocking(cid: string) {
