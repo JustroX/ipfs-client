@@ -13,8 +13,14 @@ export class IPFSNode {
         enabled: true,
       },
       config: {
+        Swarm: {
+          ConnMgr: {
+            HighWater: 200,
+            LowWater: 50,
+          },
+        },
         Routing: {
-          Type: 'dht',
+          Type: 'none',
         },
       },
     });
